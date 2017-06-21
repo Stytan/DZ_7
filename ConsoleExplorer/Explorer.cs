@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -11,15 +11,18 @@ namespace ConsoleExplorer
     {
         static readonly string[] menuMain =
         {
-            "Главное меню",
+            "\nГлавное меню",
             "1. Показать содержимое текущей папки",
             "2. Найти файл по имени, размеру, дате...",
             "3. Найти папку по имени, дате...",
-            "4. Найти текстовый файл по содержимому"
+            "4. Найти текстовый файл по содержимому",
+            "5. Сменить папку...",
+            "6. Показать текущий выбранный список",
+            "7. Меню действий..."
         };
         static readonly string[] menuFileFind =
         {
-            "Меню поиска файла. Найти файл по:",
+            "\nМеню поиска файла. Найти файл по:",
             "1. имени",
             "2. размеру",
             "3. дате создания",
@@ -28,7 +31,7 @@ namespace ConsoleExplorer
         };
         static readonly string[] menuDirFind =
         {
-            "Меню поиска директории. Найти директорию по:",
+            "\nМеню поиска директории. Найти директорию по:",
             "1. имени",
             "2. дате создания",
             "3. дате доступа",
@@ -36,7 +39,7 @@ namespace ConsoleExplorer
         };
         static readonly string[] menuAction =
         {
-            "Что нужно сделать с найденным списком?",
+            "\nЧто нужно сделать с найденным списком?",
             "1. скопировать",
             "2. переместить",
             "3. удалить",
@@ -52,11 +55,12 @@ namespace ConsoleExplorer
             MenuMain, menuFileFind, menuDirFind, menuAction, menuActionText,
             fileByName, fileBySize, fileByCreate, fileByAcсess, fileByModify, fileByText,
             dirByName, dirByCreate, dirByAcсess, dirByModify,
-            dir, copy, move, delete, replaceText,
+            dir, copy, move, delete, replaceText, changeDir, currentList,
             Exit
         };
         private MenuState State = MenuState.MenuMain;
         private DirectoryInfo currentDir;
+        private FileSystemInfo[] currentList;
         public Explorer()
         {
             currentDir = new DirectoryInfo("./");
@@ -75,12 +79,12 @@ namespace ConsoleExplorer
                     { currentMenu = menuFileFind; break; }
                 case MenuState.menuDirFind:
                     { currentMenu = menuDirFind; break; }
-                case MenuState.menuActionText:
-                    { currentMenu = menuAction; break; }
+                /*case MenuState.menuActionText:
+                    { currentMenu = menuAction; break; }*/
                 case MenuState.menuAction:
                     {
-                        currentMenu = new string[4];
-                        Array.Copy(menuAction, 0, currentMenu, 0, 4);
+                        currentMenu = menuAction;
+                        //Array.Copy(menuAction, 0, currentMenu, 0, 4);
                         break;
                     }
                 default:
@@ -124,7 +128,7 @@ namespace ConsoleExplorer
             {
                 case MenuState.MenuMain:
                     {
-                        switch(Select(4))
+                        switch(Select(7))
                         {
                             case 1:
                                 { State = MenuState.dir; break; }
@@ -134,6 +138,12 @@ namespace ConsoleExplorer
                                 { State = MenuState.menuDirFind; break; }
                             case 4:
                                 { State = MenuState.fileByText; break; }
+							case 5:
+								{ State = MenuState.changeDir; break; }
+							case 6:
+								{ State = MenuState.currentList; break; }
+							case 7:
+								{ State = MenuState.menuAction;	break;}
                             case 0:
                                 { State = MenuState.Exit; break; }
                         }
@@ -186,7 +196,7 @@ namespace ConsoleExplorer
                 case MenuState.menuActionText:
                 case MenuState.menuAction:
                     {
-                        switch (Select(State==MenuState.menuActionText ? 4 : 3))
+                        switch (Select(4))
                         {
                             case 1:
                                 { State = MenuState.copy; break; }
@@ -214,6 +224,7 @@ namespace ConsoleExplorer
         /// </summary>
         public void StartMenu()
         {
+        	ClearList();
             while (State != MenuState.Exit)
             {
                 ShowMenu();
@@ -223,7 +234,7 @@ namespace ConsoleExplorer
                     case MenuState.dir:
                         {
                             ReadDir();
-                            //ShowCurrentList();
+                            ShowCurrentList();
                             break;
                         }
                     case MenuState.copy:
@@ -267,12 +278,25 @@ namespace ConsoleExplorer
                         { FileByText(); break; }
                     case MenuState.replaceText:
                         { ReplaceText(); break; }
+					case MenuState.changeDir:
+						{ ChangeDir(); break; }
+                    case MenuState.currentList:
+                        { ShowCurrentList();
+							State = MenuState.MenuMain;
+							break; }
                 }
             }
         }
         private void ClearList()
         {
-            throw new NotImplementedException();
+			try{
+				currentList = currentDir.GetFileSystemInfos();
+			} catch (DirectoryNotFoundException e) {
+				Console.WriteLine("\n" + e.Message);
+				currentDir = new DirectoryInfo(@".\");
+				currentList = currentDir.GetFileSystemInfos();
+				State = MenuState.MenuMain;
+			}
         }
         private void ReplaceText()
         {
@@ -336,25 +360,105 @@ namespace ConsoleExplorer
 
         private void CopyList()
         {
-            throw new NotImplementedException();
+			Console.Write("Введите путь куда нужно скопировать выбранные файлы: ");
+			string newPath = Console.ReadLine();
+			//Создаём новую папку если её нет
+			if (!Directory.Exists(newPath))
+        	{
+            	Directory.CreateDirectory(newPath);
+        	}
+			//Выбираем все папки и файлы из текущего списка
+			var dirs = new List<DirectoryInfo>();
+			var files = new List<FileInfo>();
+			foreach(FileSystemInfo info in currentList)
+			{
+				if ((info.Attributes & FileAttributes.Directory) == FileAttributes.Directory)
+					dirs.Add(new DirectoryInfo(info.FullName));
+				else
+					files.Add(new FileInfo(info.FullName));
+			}
+			//Копируем файлы
+	        foreach (FileInfo file in files)
+        	{
+            	string temppath = Path.Combine(newPath, file.Name);
+            	try{
+            	file.CopyTo(temppath, false);
+            	}catch(IOException)
+            	{ Console.WriteLine("Файл " + file.Name + " уже есть впапке назначения и не будет скопирован");}
+            	
+        	}
+	        //Если есть подпапки копируем их
+			if (dirs.Count>0)
+        	{
+	            foreach (DirectoryInfo subdir in dirs)
+    	        {
+    	            string temppath = Path.Combine(newPath, subdir.Name);
+    	            DirectoryCopy(subdir.FullName, temppath);
+    	        }
+    	    }
+			State = MenuState.MenuMain;
         }
+		
+        private void DirectoryCopy(string sourceDirName, string destDirName)
+        {
+        	DirectoryInfo dir = new DirectoryInfo(sourceDirName);
 
+	        DirectoryInfo[] dirs = dir.GetDirectories();
+        	if (!Directory.Exists(destDirName))
+        	{
+            	Directory.CreateDirectory(destDirName);
+        	}
+
+	        FileInfo[] files = dir.GetFiles();
+    	    foreach (FileInfo file in files)
+    	    {
+    	        string temppath = Path.Combine(destDirName, file.Name);
+    	        try{
+    	        	file.CopyTo(temppath, false);
+    	        }catch(IOException)
+            	{ Console.WriteLine("Файл " + file.Name + " уже есть впапке назначения и не будет скопирован");}
+    	    }
+
+            foreach (DirectoryInfo subdir in dirs)
+            {
+                string temppath = Path.Combine(destDirName, subdir.Name);
+                DirectoryCopy(subdir.FullName, temppath);
+            }
+        }
         private void ShowCurrentList()
         {
-            throw new NotImplementedException();
+            foreach(FileSystemInfo info in currentList)
+            {
+            	if((info.Attributes & FileAttributes.Directory) == FileAttributes.Directory)
+                	Console.WriteLine("->[DIR] {0}",info.Name);
+            }
+            foreach(FileSystemInfo info in currentList)
+            {
+            	if((info.Attributes & FileAttributes.Directory) != FileAttributes.Directory)
+                	Console.WriteLine("->     {0}",info.Name);
+            }
         }
 
         private void ReadDir()
         {
-            foreach(DirectoryInfo dir in currentDir.GetDirectories())
-            {
-                Console.WriteLine("[dir] {0}",dir.Name);
-            }
-            foreach(FileInfo file in currentDir.GetFiles())
-            {
-                Console.WriteLine(file.Name);
-            }
+			ClearList();
+			Console.WriteLine("Текущая папка: " + currentDir.FullName);
             State = MenuState.MenuMain;
+        }
+        
+        private void ChangeDir()
+        {
+			Console.Write("Введите новую папку: ");
+			try{
+				var newDir = new DirectoryInfo(Console.ReadLine());
+				newDir.Refresh();
+				currentDir = newDir;
+				Directory.SetCurrentDirectory(currentDir.FullName);
+			} catch (IOException e) {
+				Console.WriteLine("\n" + e.Message);
+			}
+			Console.WriteLine("Текущая папка изменена на " + currentDir.FullName);
+			State = MenuState.MenuMain;
         }
     }
 }
