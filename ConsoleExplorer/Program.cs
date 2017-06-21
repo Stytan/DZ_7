@@ -10,6 +10,8 @@ namespace ConsoleExplorer
     {
         static void Main(string[] args)
         {
+            Explorer CE = new Explorer();
+            CE.StartMenu();
         }
     }
 }
